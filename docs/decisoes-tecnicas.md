@@ -85,17 +85,22 @@ Registro das decisões técnicas relevantes do backend, com justificativa. Decis
 
 ---
 
-## 10. Armazenamento de arquivos — A DEFINIR
+## 10. Arquivos armazenados diretamente no banco de dados (BLOB)
 
-**Contexto:** quatro tipos de arquivo precisam de object storage:
-1. Foto do medicamento doado
-2. Bula (PDF)
-3. Documento de identidade RG/CNH
-4. Avatar do usuário
+**Decisão:** arquivos binários (fotos, PDFs, documentos) são armazenados como `MEDIUMBLOB` / `LONGBLOB` diretamente no MySQL. Não há serviço externo de object storage.
 
-**Decisão pendente:** o serviço (AWS S3, Cloudflare R2, Google Cloud Storage, etc.) ainda será escolhido. O banco guarda apenas as URLs.
+**Arquivos afetados:**
+1. Foto do medicamento doado (`donations.photo`) — obrigatória
+2. Documento de identidade RG/CNH (`users.identity_document`) — obrigatório no cadastro
+3. Foto de perfil / avatar (`users.photo`) — opcional
 
-Decisão: Armazenar arquivos no banco de dados
+**Bula:** não é armazenada digitalmente. Fica fisicamente com o medicamento no ponto de retirada (ver decisão 14).
+
+Cada campo de arquivo é acompanhado de `_name` (nome original) e `_type` (MIME type), para permitir o download correto no frontend.
+
+**Justificativa:** simplicidade para o MVP, sem dependência de serviço externo.
+
+**Trade-off conhecido:** bancos com muitos BLOBs crescem rapidamente e podem impactar performance de backup e consultas. Caso o volume de arquivos se torne um problema, migrar para object storage externo e substituir os campos BLOB por colunas de URL.
 ---
 
 ## 11. Estrutura em camadas
@@ -104,9 +109,50 @@ Decisão: Armazenar arquivos no banco de dados
 
 ---
 
+## 12. Receita médica exigida na retirada física
+
+**Decisão:** a receita médica é verificada **presencialmente no ponto de retirada**, no momento da entrega do medicamento. Não há upload digital de receita no app.
+
+**Justificativa:** a triagem sanitária já ocorre no ponto físico (farmacêutico/técnico). Exigir a receita na retirada mantém o controle sem adicionar complexidade de validação de documentos na API.
+
+**Impacto no modelo:** a entidade `requests` não precisa de um campo de receita. O campo `donations.requires_prescription` sinaliza ao beneficiário que deverá apresentar a receita ao retirar — informação exibida na tela de detalhes do medicamento.
+
+---
+
+---
+
+## 13. Atribuição do ponto de retirada na triagem
+
+**Decisão:** o ponto de retirada é atribuído **automaticamente** no momento da aprovação, com base na farmácia vinculada ao usuário que aprova.
+
+**Fluxo:**
+1. O doador cadastra o medicamento pelo app (doação fica `pendente`).
+2. O doador leva o medicamento fisicamente até a farmácia parceira mais próxima.
+3. O farmacêutico ou responsável, já cadastrado no sistema como `PROFESSIONAL` ou `ADMIN`, aprova a doação.
+4. O backend lê o `partner_id` do aprovador e grava esse valor em `donations.pickup_point_id` automaticamente — sem nenhuma entrada manual.
+
+**Impacto no modelo:**
+- `users.partner_id` (FK → `partners.id`, nullable) vincula um usuário responsável à sua farmácia.
+- `PATCH /users/:id/partner` (ADMIN) permite atribuir ou remover esse vínculo.
+- `PATCH /donations/:id/status` não recebe mais `pickupPointId` no corpo — o campo é ignorado. Se o aprovador não tiver `partner_id`, a API retorna 422.
+
+**Justificativa:** elimina redundância (o farmacêutico já está na farmácia) e previne erros de atribuição manual do ponto de retirada.
+
+---
+
 ## Itens em aberto
 
-- [X] Definir serviço de armazenamento de arquivos
-- [ ] Confirmar o momento de exigência da receita (na doação de controlados e/ou na solicitação)
-- [X] Definir se haverá notificações push (toggle existe no app, sem backend) - Não
-- [ ] Definir como o ponto de retirada é atribuído a uma doação na triagem
+- [X] Definir serviço de armazenamento de arquivos — armazenado no banco (decisão 10)
+- [X] Confirmar o momento de exigência da receita — exigida na retirada física (decisão 12)
+- [X] Definir se haverá notificações push — Não, no MVP
+- [X] Definir como o ponto de retirada é atribuído a uma doação na triagem — atribuído automaticamente pela farmácia do aprovador (decisão 13)
+
+---
+
+## 14. Bula armazenada fisicamente, não no banco
+
+**Decisão:** a bula do medicamento **não é armazenada no banco de dados**. Ela permanece fisicamente com o medicamento no ponto de retirada.
+
+**Impacto no modelo:** os campos `donations.leaflet`, `donations.leaflet_name` e `donations.leaflet_type` foram removidos da tabela e de toda a camada de aplicação. O `POST /api/donations` não aceita mais campos `leafletBase64`, `leafletName` ou `leafletType`.
+
+**Justificativa:** a bula já acompanha o medicamento físico. Armazená-la no banco adicionaria volume considerável (PDFs em LONGBLOB) sem benefício operacional, pois o beneficiário acessa a bula no ponto de retirada.

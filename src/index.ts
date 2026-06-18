@@ -5,7 +5,8 @@ import { errorHandler } from "./middlewares/errorHandler";
 
 const app = express();
 
-app.use(express.json());
+// Larger limit because files (photos, PDFs) arrive as base64 in the JSON body.
+app.use(express.json({ limit: "100ssmb" }));
 app.use("/api", routes);
 app.use(errorHandler);
 

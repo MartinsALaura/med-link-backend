@@ -12,9 +12,8 @@ sequenceDiagram
     participant API as API (Express)
     participant DB as MySQL
 
-    App->>API: POST /api/auth/register (dados + Cartão SUS)
-    App->>API: POST /api/uploads/identity-document (RG/CNH)
-    API->>DB: cria usuário (senha com hash, status ativo)
+    App->>API: POST /api/auth/register (dados + Cartão SUS + RG/CNH em base64)
+    API->>DB: cria usuário (senha com hash, documento como BLOB, status ativo)
     API-->>App: 201 Created
 
     App->>API: POST /api/auth/login (email, senha)
@@ -36,13 +35,15 @@ sequenceDiagram
 
     Doador->>App: Preenche medicamento + foto + checklist
     App->>App: Valida (não vencido, lacrado, embalagem original, foto)
-    App->>API: POST /api/uploads/donation-photo
-    App->>API: POST /api/donations
+    App->>API: POST /api/donations (foto e bula em base64 no corpo)
+    Note over API: Backend revalida validade, lacrado e embalagem original
     API-->>App: 201 (status: pendente)
 
+    Note over Doador: Doador leva o medicamento fisicamente até a farmácia parceira
     Admin->>API: PATCH /api/donations/:id/status (aprovado | recusado)
+    Note over API: Ao aprovar, pickup_point_id é atribuído automaticamente<br/>pela farmácia do aprovador (users.partner_id)
     alt Aprovada
-        API-->>Admin: status: aprovado (disponível na busca)
+        API-->>Admin: status: aprovado, pickupPointId preenchido automaticamente
     else Recusada
         API-->>Admin: status: recusado
     end

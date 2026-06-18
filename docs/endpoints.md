@@ -25,7 +25,7 @@ Verifica se o servidor está no ar.
 
 ---
 
-## Autenticação · 📋
+## Autenticação · ✅
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
@@ -61,7 +61,7 @@ Verifica se o servidor está no ar.
 
 ---
 
-## Usuários · 📋
+## Usuários · ✅
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
@@ -73,9 +73,13 @@ Verifica se o servidor está no ar.
 
 **PATCH /api/users/:id/status** — corpo: `{ "status": "bloqueado" }` ou `{ "status": "ativo" }`.
 
+**PATCH /api/users/:id/partner** — corpo: `{ "partnerId": 3 }` (ou `null` para desvincular). Vincula um PROFESSIONAL à farmácia onde trabalha. Esse vínculo define automaticamente o ponto de retirada ao aprovar doações.
+
+**PATCH /api/users/:id/password** — corpo: `{ "currentPassword": "...", "newPassword": "..." }` (mínimo 6 caracteres).
+
 ---
 
-## Doações · 📋
+## Doações · ✅
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
@@ -108,13 +112,13 @@ Verifica se o servidor está no ar.
   "requiresPrescription": true
 }
 ```
-> A foto do medicamento (obrigatória) e a bula são enviadas via upload — ver seção **Arquivos**.
+> A foto do medicamento (obrigatória) é enviada em base64 no corpo da requisição — ver seção **Arquivos**. A bula fica fisicamente com o medicamento e não é armazenada no banco (ver [decisoes-tecnicas.md](decisoes-tecnicas.md), decisão 14).
 
-**PATCH /api/donations/:id/status** — corpo: `{ "status": "aprovado" }` (`pendente` → `aprovado`/`recusado`, `aprovado` → `concluido`).
+**PATCH /api/donations/:id/status** — corpo: `{ "status": "aprovado" }` (`pendente` → `aprovado`/`recusado`, `aprovado` → `concluido`). Ao aprovar, o `pickup_point_id` é definido automaticamente pela farmácia vinculada ao aprovador (`users.partner_id`). Retorna 422 se o aprovador não estiver vinculado a nenhuma farmácia ativa.
 
 ---
 
-## Solicitações · 📋
+## Solicitações · ✅
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
@@ -133,7 +137,7 @@ Verifica se o servidor está no ar.
 
 ---
 
-## Parceiros · 📋
+## Parceiros · ✅
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
@@ -184,7 +188,6 @@ Arquivos são armazenados como BLOB no MySQL (ver [decisoes-tecnicas.md](decisoe
 | Campo no corpo | Endpoint | Obrigatório |
 |---|---|---|
 | `photoBase64`, `photoName`, `photoType` | `POST /api/donations` | Sim |
-| `leafletBase64`, `leafletName`, `leafletType` | `POST /api/donations` | Não |
 | `identityDocumentBase64`, `identityDocumentName`, `identityDocumentType` | `POST /api/auth/register` | Sim |
 | `photoBase64`, `photoName`, `photoType` | `PUT /api/users/:id` | Não |
 

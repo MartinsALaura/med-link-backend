@@ -138,9 +138,13 @@ Soluções atuais são limitadas e desorganizadas:
 | Camada | Tecnologia |
 |---|---|
 | Mobile (frontend) | Ionic + Angular |
-| Backend (API) | Node.js + TypeScript |
-| Banco de dados | MySQL |
-| Armazenamento de arquivos | A definir |
+| Backend (API) | Node.js + TypeScript + Express |
+| Banco de dados | MySQL (driver `mysql2`) |
+| Autenticação | JWT (`jsonwebtoken`) + hash de senha (`bcrypt`) |
+| Validação | Zod |
+| Documentação da API | OpenAPI 3 + Swagger UI |
+| Testes | Jest + ts-jest |
+| Armazenamento de arquivos | BLOB no MySQL (MEDIUMBLOB/LONGBLOB) |
 
 ## Por que Node.js + TypeScript (sem framework)?
 
@@ -177,8 +181,8 @@ Acesso a um dos maiores ecossistemas de pacotes do mundo, com soluções para au
 
 | Dado | Solução |
 |---|---|
-| Usuários, consultas, registros médicos | MySQL |
-| Fotos, exames, PDFs | A definir — serviço de object storage (URL salva no MySQL) |
+| Usuários, doações, solicitações, parceiros | MySQL |
+| Fotos, documentos (RG/CNH), bulas em PDF | BLOB no próprio MySQL (ver [docs/decisoes-tecnicas.md](docs/decisoes-tecnicas.md), decisão 10) |
 
 ---
 
@@ -186,13 +190,18 @@ Acesso a um dos maiores ecossistemas de pacotes do mundo, com soluções para au
 
 ```
 src/
-├── config/         # Variáveis de ambiente e configurações globais
-├── controllers/    # Handlers das requisições HTTP
-├── middlewares/    # Middlewares (auth, erros, validação)
-├── models/         # Tipos, interfaces e entidades do domínio
+├── config/         # env, conexão MySQL (db.ts), schema.sql, setup-user.sql
+├── controllers/    # Handlers das requisições HTTP (validação com Zod)
+├── docs/           # Especificação OpenAPI (Swagger)
+├── middlewares/    # auth (JWT), requireRole, errorHandler
+├── models/         # Acesso a dados (SQL) e tipos do domínio
 ├── routes/         # Definição das rotas da API
 ├── services/       # Regras de negócio
+├── types/          # Augmentações de tipos (ex: Express.Request.user)
+├── utils/          # AppError, conversão base64, asyncHandler
 └── index.ts        # Entrypoint da aplicação
+
+tests/              # Testes unitários (Jest)
 ```
 
 Fluxo de camadas: `routes → controllers → services → models`
@@ -233,16 +242,101 @@ Fluxo de camadas: `routes → controllers → services → models`
 
 ---
 
-## Como rodar
+## Configuração e Execução
+
+### Pré-requisitos
+
+- Node.js 18+ e npm
+- MySQL 8+ em execução
+
+### 1. Instalar dependências
 
 ```bash
 npm install
+```
+
+### 2. Configurar variáveis de ambiente
+
+Copie o arquivo de exemplo e ajuste os valores conforme o seu ambiente:
+
+```bash
+cp .env.example .env
+```
+
+| Variável | Descrição | Padrão |
+|---|---|---|
+| `PORT` | Porta do servidor HTTP | `3000` |
+| `NODE_ENV` | Ambiente de execução | `development` |
+| `DB_HOST` | Host do MySQL | `localhost` |
+| `DB_PORT` | Porta do MySQL | `3306` |
+| `DB_USER` | Usuário do banco | `medlink` |
+| `DB_PASSWORD` | Senha do banco | — |
+| `DB_NAME` | Nome do banco | `medlink` |
+| `JWT_SECRET` | Segredo para assinar os tokens JWT | — |
+| `JWT_EXPIRES_IN` | Validade do token | `7d` |
+
+> Se a senha contiver caracteres especiais (ex: `#`), coloque-a entre aspas no `.env`.
+
+### 3. Criar o banco de dados
+
+Crie o banco e um usuário dedicado (rode como root/admin do MySQL):
+
+```bash
+sudo mysql --defaults-file=/etc/mysql/debian.cnf < src/config/setup-user.sql
+```
+
+Em seguida, crie as tabelas a partir do schema:
+
+```bash
+mysql -u medlink -p medlink < src/config/schema.sql
+```
+
+> Ajuste o usuário/senha em `src/config/setup-user.sql` antes de rodar. As tabelas e seus campos estão documentados em [docs/modelo-de-dados.md](docs/modelo-de-dados.md).
+
+### 4. Rodar em desenvolvimento
+
+```bash
 npm run dev
 ```
 
-## Como compilar
+O servidor sobe em `http://localhost:3000`. Verifique com `GET /api/health`.
+
+### 5. Compilar e rodar em produção
 
 ```bash
 npm run build
 npm start
 ```
+
+---
+
+## Documentação da API
+
+- **Swagger UI (interativo):** `http://localhost:3000/api/docs`
+- **Especificação OpenAPI (JSON):** `http://localhost:3000/api/openapi.json`
+- **Referência em Markdown:** [docs/endpoints.md](docs/endpoints.md)
+
+A autenticação usa JWT no header `Authorization: Bearer <token>`. No Swagger UI, use o botão **Authorize** para enviar o token nas requisições protegidas.
+
+---
+
+## Testes
+
+Testes unitários com Jest cobrindo as regras de negócio dos services (validações, máquinas de estado, janela de cancelamento de 5h, controle de acesso) e utilitários.
+
+```bash
+npm test           # roda toda a suíte
+npm run test:watch # modo watch
+```
+
+---
+
+## Documentação Complementar
+
+| Documento | Conteúdo |
+|---|---|
+| [docs/plano-de-implementacao.md](docs/plano-de-implementacao.md) | Plano de implementação em fases |
+| [docs/modelo-de-dados.md](docs/modelo-de-dados.md) | Entidades, ER e máquinas de estado |
+| [docs/endpoints.md](docs/endpoints.md) | Referência de todos os endpoints |
+| [docs/fluxos.md](docs/fluxos.md) | Fluxos do sistema (sequência) |
+| [docs/decisoes-tecnicas.md](docs/decisoes-tecnicas.md) | Decisões técnicas e justificativas |

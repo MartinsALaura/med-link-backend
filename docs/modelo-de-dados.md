@@ -28,9 +28,13 @@ erDiagram
         string neighborhood
         string city
         string state "UF"
-        string identity_document_url "RG/CNH"
+        blob identity_document "RG/CNH — MEDIUMBLOB"
+        string identity_document_name "nome do arquivo"
+        string identity_document_type "MIME type"
         string sus_card_number "Cartão SUS"
-        string photo_url "avatar, nullable"
+        blob photo "avatar — MEDIUMBLOB, nullable"
+        string photo_name "nullable"
+        string photo_type "nullable"
         enum role "USER | PROFESSIONAL | ADMIN"
         enum status "ativo | bloqueado"
         datetime created_at
@@ -56,9 +60,10 @@ erDiagram
         string donor_address
         boolean sealed "lacrado"
         boolean original_packaging "embalagem original"
-        boolean requires_prescription "receita"
-        string photo_url "foto do medicamento"
-        string leaflet_url "bula, nullable"
+        boolean requires_prescription "exige receita na retirada"
+        blob photo "foto — MEDIUMBLOB, obrigatória"
+        string photo_name "nome do arquivo"
+        string photo_type "MIME type"
         string indication "indicação, nullable"
         string contraindication "contraindicação, nullable"
         string care_notes "cuidados, nullable"
@@ -110,9 +115,11 @@ Todos os usuários da plataforma. Campos derivados da tela de **cadastro** e do 
 
 - Dados pessoais: nome, CPF, data de nascimento, celular, e-mail, senha
 - Endereço completo: CEP, endereço, número, complemento, bairro, cidade, UF
-- Documentos: RG/CNH (`identity_document_url`) e número do Cartão SUS
-- `photo_url`: avatar exibido no perfil
-- `status`: `ativo` / `bloqueado` — controlado pelo admin (tela Admin → aba Usuários)
+- `identity_document`: binário do RG/CNH (MEDIUMBLOB) — obrigatório no cadastro
+- `sus_card_number`: número do Cartão SUS
+- `photo`: avatar (MEDIUMBLOB, opcional)
+- Cada campo de arquivo tem `_name` e `_type` associados para download correto
+- `status`: `ativo` / `bloqueado` — controlado pelo admin
 - `role`: `USER` (doa e solicita), `PROFESSIONAL` (triagem) ou `ADMIN`
 
 ### donations
@@ -121,8 +128,8 @@ Todos os usuários da plataforma. Campos derivados da tela de **cadastro** e do 
 - Dados do medicamento: nome, princípio ativo, concentração, forma farmacêutica, laboratório, categoria, tarja
 - Quantidade, lote, validade, descrição
 - Condições obrigatórias: `sealed` (lacrado) e `original_packaging` (embalagem original)
-- `requires_prescription`: medicamento controlado exige receita
-- Arquivos: `photo_url` (foto obrigatória) e `leaflet_url` (bula)
+- `requires_prescription`: quando `true`, o beneficiário deve **apresentar receita médica presencialmente** no momento da retirada — não há upload digital
+- Arquivo: `photo` (MEDIUMBLOB, obrigatória). A bula fica fisicamente com o medicamento no ponto de retirada — não é armazenada no banco.
 - Informações clínicas (exibidas na tela de detalhes): indicação, contraindicação, cuidados
 - `pickup_point_id`: ponto de retirada (definido na triagem)
 - `status`: ver máquina de estado abaixo
@@ -186,11 +193,16 @@ stateDiagram-v2
 
 ## Armazenamento de Arquivos
 
-Quatro tipos de arquivo precisam de object storage (serviço **a definir** — ver [decisoes-tecnicas.md](decisoes-tecnicas.md)):
+Arquivos são armazenados **diretamente no MySQL como BLOB** (ver [decisoes-tecnicas.md](decisoes-tecnicas.md), decisão 10).
 
-1. Foto do medicamento doado (`donations.photo_url`)
-2. Bula do medicamento (`donations.leaflet_url`)
-3. Documento de identidade RG/CNH (`users.identity_document_url`)
-4. Foto de perfil / avatar (`users.photo_url`)
+| Campo | Tabela | Tipo MySQL | Obrigatório |
+|---|---|---|---|
+| `photo` | `donations` | MEDIUMBLOB | Sim |
+| `identity_document` | `users` | MEDIUMBLOB | Sim |
+| `photo` | `users` | MEDIUMBLOB | Não |
 
-O banco guarda apenas as URLs; os binários ficam no storage externo.
+Cada campo binário tem dois campos auxiliares: `_name` (nome do arquivo original) e `_type` (MIME type, ex: `image/jpeg`, `application/pdf`), necessários para o download correto no frontend.
+
+O frontend já envia arquivos como base64 (ver `perfil.page.ts` → `documentoBase64`). A API recebe base64, converte para Buffer e persiste no banco.
+
+**Receita médica:** não é armazenada digitalmente. Para medicamentos com `requires_prescription = true`, a receita é verificada **presencialmente** no ponto de retirada (ver decisão 12).

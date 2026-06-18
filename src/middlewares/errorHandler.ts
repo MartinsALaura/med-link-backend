@@ -1,17 +1,24 @@
 import { Request, Response, NextFunction } from "express";
-
-export interface AppError extends Error {
-  statusCode?: number;
-}
+import { ZodError } from "zod";
+import { AppError } from "../utils/AppError";
 
 export function errorHandler(
-  err: AppError,
+  err: Error,
   _req: Request,
   res: Response,
   _next: NextFunction
 ): void {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || "Erro interno do servidor";
+  // Schema validation errors from controllers.
+  if (err instanceof ZodError) {
+    res.status(400).json({ error: "Dados inválidos.", details: err.issues });
+    return;
+  }
 
-  res.status(statusCode).json({ error: message });
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({ error: err.message });
+    return;
+  }
+
+  console.error(err);
+  res.status(500).json({ error: "Erro interno do servidor" });
 }
