@@ -38,7 +38,8 @@ export interface DonationRow extends RowDataPacket {
   pickup_point_address?: string | null;
 }
 
-// List row without BLOB columns.
+// List row. Includes the photo BLOB so the catalog/grid can render images
+// straight from the database (converted to a data URI in the service layer).
 export interface DonationListRow extends RowDataPacket {
   id: number;
   donor_id: number;
@@ -55,6 +56,13 @@ export interface DonationListRow extends RowDataPacket {
   status: DonationStatus;
   pickup_point_id: number | null;
   pickup_point_name: string | null;
+  donor_name: string | null;
+  donor_address: string;
+  indication: string | null;
+  contraindication: string | null;
+  care_notes: string | null;
+  photo: Buffer | null;
+  photo_type: string | null;
   created_at: string;
 }
 
@@ -159,9 +167,13 @@ export async function findDonations(filters: {
     `SELECT d.id, d.donor_id, d.name, d.active_ingredient, d.concentration,
             d.dosage_form, d.laboratory, d.category, d.tarja, d.quantity,
             d.expiration_date, d.requires_prescription, d.status,
-            d.pickup_point_id, p.trade_name AS pickup_point_name, d.created_at
+            d.pickup_point_id, p.trade_name AS pickup_point_name,
+            u.name AS donor_name, d.donor_address,
+            d.indication, d.contraindication, d.care_notes,
+            d.photo, d.photo_type, d.created_at
      FROM donations d
      LEFT JOIN partners p ON p.id = d.pickup_point_id
+     JOIN users u ON u.id = d.donor_id
      ${whereClause}
      ORDER BY d.created_at DESC`,
     values

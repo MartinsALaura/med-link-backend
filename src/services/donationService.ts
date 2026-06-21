@@ -71,6 +71,59 @@ export interface PublicDonation {
   updatedAt: string;
 }
 
+// Lightweight list shape (camelCase, photo as a data URI, no other BLOBs).
+export interface PublicDonationListItem {
+  id: number;
+  donorId: number;
+  name: string;
+  activeIngredient: string;
+  concentration: string;
+  dosageForm: string;
+  laboratory: string;
+  category: string;
+  tarja: string;
+  quantity: number;
+  expirationDate: string;
+  requiresPrescription: boolean;
+  status: DonationStatus;
+  pickupPointId: number | null;
+  pickupPointName: string | null;
+  donorName: string | null;
+  donorAddress: string;
+  indication: string | null;
+  contraindication: string | null;
+  careNotes: string | null;
+  photo: string | null;
+  createdAt: string;
+}
+
+function toListItem(row: DonationListRow): PublicDonationListItem {
+  return {
+    id: row.id,
+    donorId: row.donor_id,
+    name: row.name,
+    activeIngredient: row.active_ingredient,
+    concentration: row.concentration,
+    dosageForm: row.dosage_form,
+    laboratory: row.laboratory,
+    category: row.category,
+    tarja: row.tarja,
+    quantity: row.quantity,
+    expirationDate: row.expiration_date,
+    requiresPrescription: !!row.requires_prescription,
+    status: row.status,
+    pickupPointId: row.pickup_point_id,
+    pickupPointName: row.pickup_point_name,
+    donorName: row.donor_name,
+    donorAddress: row.donor_address,
+    indication: row.indication,
+    contraindication: row.contraindication,
+    careNotes: row.care_notes,
+    photo: row.photo && row.photo_type ? bufferToBase64(row.photo, row.photo_type) : null,
+    createdAt: row.created_at,
+  };
+}
+
 function toPublicDonation(row: DonationRow): PublicDonation {
   return {
     id: row.id,
@@ -158,8 +211,9 @@ export async function create(
 export async function list(filters: {
   status?: string;
   search?: string;
-}): Promise<DonationListRow[]> {
-  return findDonations(filters);
+}): Promise<PublicDonationListItem[]> {
+  const rows = await findDonations(filters);
+  return rows.map(toListItem);
 }
 
 export async function getById(id: number): Promise<PublicDonation> {
